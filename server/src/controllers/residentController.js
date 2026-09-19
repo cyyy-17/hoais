@@ -1,4 +1,7 @@
 const prisma = require('../utils/prisma');
+const bcrypt = require('bcryptjs');
+const { createResidentSchema, updateResidentSchema } = require('../validators/residentValidator');
+const auditService = require('../services/auditService');
 
 // Get all residents
 exports.getAllResidents = async (req, res, next) => {
@@ -18,10 +21,15 @@ exports.getAllResidents = async (req, res, next) => {
 // Create a resident
 exports.createResident = async (req, res, next) => {
   try {
-    const { name, email, password, block, lot, moveInDate, status } = req.body;
+    const parsed = createResidentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0].message, details: parsed.error.errors });
+    }
     
-    // In a real app, hash password here using bcrypt
-    // But since this is a prototype, we can use a dummy plain text or simple hash
+    const { name, email, password, block, lot, moveInDate, status } = parsed.data;
+    
+    // Hash password here using bcrypt
+    const hashedPassword = bcrypt.hashSync(password || 'password123', 12);
     
     // We create the user and resident in a transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -29,7 +37,7 @@ exports.createResident = async (req, res, next) => {
         data: {
           name,
           email,
-          password: 'hashed_password_placeholder', // TODO: implement real hash
+          password: hashedPassword,
           role: 'RESIDENT'
         }
       });
@@ -47,8 +55,13 @@ exports.createResident = async (req, res, next) => {
       return { user, resident };
     });
     
+    await auditService.logAction(req.user?.id || 'SYSTEM', 'CREATE_RESIDENT', 'RESIDENT', result.resident.id);
+
     res.status(201).json(result);
   } catch (err) {
+    if (err.code === 'P2002') {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
     next(err);
   }
 };
@@ -76,13 +89,20 @@ exports.getResident = async (req, res, next) => {
 // Update resident
 exports.updateResident = async (req, res, next) => {
   try {
-    const { block, lot, status } = req.body;
+    const parsed = updateResidentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0].message, details: parsed.error.errors });
+    }
+    
+    const { block, lot, status } = parsed.data;
     
     const resident = await prisma.resident.update({
       where: { id: req.params.id },
       data: { block, lot, status }
     });
     
+    await auditService.logAction(req.user?.id || 'SYSTEM', 'UPDATE_RESIDENT', 'RESIDENT', resident.id);
+
     res.json(resident);
   } catch (err) {
     next(err);

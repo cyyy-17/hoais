@@ -70,6 +70,9 @@ model Dues {
   status      String   @default("PENDING") // PENDING, PAID, OVERDUE
 
   payments    Payment[]
+
+  @@index([status])
+  @@index([residentId])
 }
 
 model Payment {
@@ -103,6 +106,8 @@ model Maintenance {
   assignedTo  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([status])
 }
 
 model Facility {
@@ -135,4 +140,24 @@ model AuditLog {
   entity    String
   entityId  String
   timestamp DateTime @default(now())
+
+  @@index([timestamp])
+}
+
+model HoaProfile {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  email     String
+  phone     String
+  updatedAt DateTime @updatedAt
+}
+
+model BoardMember {
+  id        String   @id @default(uuid())
+  name      String
+  role      String
+  email     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

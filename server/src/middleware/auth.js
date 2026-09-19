@@ -7,9 +7,6 @@ exports.protect = (req, res, next) => {
   }
   
   if (!token) {
-    // For prototyping we allow bypass if no JWT secret is set
-    if (!process.env.JWT_SECRET) return next();
-    
     return res.status(401).json({ error: 'Not authorized to access this route' });
   }
 
@@ -24,8 +21,9 @@ exports.protect = (req, res, next) => {
 
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    // Prototyping bypass
-    if (!req.user || !process.env.JWT_SECRET) return next();
+    if (!req.user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ error: `User role ${req.user.role} is not authorized` });

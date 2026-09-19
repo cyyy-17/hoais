@@ -1,4 +1,5 @@
 const prisma = require('../utils/prisma');
+const { createAnnouncementSchema } = require('../validators/announcementValidator');
 
 exports.getAllAnnouncements = async (req, res, next) => {
   try {
@@ -16,14 +17,18 @@ exports.getAllAnnouncements = async (req, res, next) => {
 
 exports.createAnnouncement = async (req, res, next) => {
   try {
-    const { title, body, category, pinned } = req.body;
+    const parsed = createAnnouncementSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0].message, details: parsed.error.errors });
+    }
+    const { title, body, category, pinned } = parsed.data;
     const announcement = await prisma.announcement.create({
       data: {
         title,
         body,
         category,
         pinned: pinned || false,
-        createdBy: 'Admin User' // In reality, get from req.user
+        createdBy: req.user?.name || 'Admin User'
       }
     });
     res.status(201).json(announcement);

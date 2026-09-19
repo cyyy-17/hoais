@@ -1,8 +1,25 @@
-import { useState } from 'react';
-import { Save, Shield, Users, FileText, Upload, Plus, Trash2, Edit2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Save, Shield, Users, FileText, Upload, Plus, Trash2, Edit2, Download } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import useToastStore from '../../store/useToastStore';
 import Avatar from '../../components/ui/Avatar';
 import Modal from '../../components/ui/Modal';
+import api from '../../api';
+
+const profileSchema = z.object({
+  name: z.string().min(2, 'Association name must be at least 2 characters'),
+  email: z.string().email('Invalid email address'),
+  phone: z.string().min(5, 'Phone number is required'),
+  address: z.string().min(5, 'Address is required')
+});
+
+const boardSchema = z.object({
+  name: z.string().min(2, 'Name is required'),
+  role: z.string().min(2, 'Role is required'),
+  email: z.string().email('Invalid email address')
+});
 
 export default function Settings() {
   const addToast = useToastStore(state => state.addToast);
@@ -10,43 +27,67 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState('PROFILE');
   const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   
-  const [profileForm, setProfileForm] = useState({
-    name: 'Sunnyvale Homeowners Association',
-    address: '123 Sunnyvale Ave, Brgy. San Antonio, Metro Manila',
-    email: 'admin@sunnyvale.com',
-    phone: '+63 917 123 4567'
+  const profileForm = useForm({
+    resolver: zodResolver(profileSchema)
   });
 
-  const [board, setBoard] = useState([
-    { id: 1, name: 'Michael Scott', role: 'President', email: 'michael@sunnyvale.com' },
-    { id: 2, name: 'Dwight Schrute', role: 'Vice President', email: 'dwight@sunnyvale.com' },
-    { id: 3, name: 'Angela Martin', role: 'Treasurer', email: 'angela@sunnyvale.com' },
-  ]);
+  const boardForm = useForm({
+    resolver: zodResolver(boardSchema)
+  });
 
-  const handleProfileSave = (e) => {
-    e.preventDefault();
-    // Simulate API call
-    setTimeout(() => {
+  const [board, setBoard] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const [profileRes, boardRes] = await Promise.all([
+        api.get('/settings/profile'),
+        api.get('/settings/board')
+      ]);
+      if (profileRes.data) {
+        profileForm.reset(profileRes.data);
+      }
+      setBoard(boardRes.data || []);
+    } catch (err) {
+      addToast('Failed to load settings', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileSave = async (data) => {
+    try {
+      await api.put('/settings/profile', data);
       addToast('HOA Profile settings saved successfully!', 'success');
-    }, 500);
+    } catch (err) {
+      addToast('Failed to save profile', 'error');
+    }
   };
 
-  const handleAddBoardMember = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    setBoard([...board, {
-      id: Date.now(),
-      name: formData.get('name'),
-      role: formData.get('role'),
-      email: formData.get('email')
-    }]);
-    setIsBoardModalOpen(false);
-    addToast('Board member added.', 'success');
+  const handleAddBoardMember = async (data) => {
+    try {
+      const res = await api.post('/settings/board', data);
+      setBoard([...board, res.data]);
+      setIsBoardModalOpen(false);
+      boardForm.reset();
+      addToast('Board member added.', 'success');
+    } catch (err) {
+      addToast('Failed to add board member', 'error');
+    }
   };
 
-  const removeBoardMember = (id) => {
-    setBoard(board.filter(b => b.id !== id));
-    addToast('Board member removed.', 'info');
+  const removeBoardMember = async (id) => {
+    try {
+      await api.delete(`/settings/board/${id}`);
+      setBoard(board.filter(b => b.id !== id));
+      addToast('Board member removed.', 'info');
+    } catch (err) {
+      addToast('Failed to remove board member', 'error');
+    }
   };
 
   return (
@@ -80,30 +121,36 @@ export default function Settings() {
         {activeTab === 'PROFILE' && (
           <div className="neu-card" style={{ maxWidth: '800px' }}>
             <h3 style={{ margin: '0 0 24px 0', fontSize: '1.4rem' }}>General Information</h3>
-            <form onSubmit={handleProfileSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <form onSubmit={profileForm.handleSubmit(handleProfileSave)} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }} className="grid-mobile-1">
                 <div>
                   <label className="neu-label">Association Name</label>
-                  <input type="text" className="neu-input" value={profileForm.name} onChange={e => setProfileForm({...profileForm, name: e.target.value})} required />
+                  <input type="text" className={`neu-input ${profileForm.formState.errors.name ? 'error' : ''}`} {...profileForm.register('name')} />
+                  {profileForm.formState.errors.name && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{profileForm.formState.errors.name.message}</span>}
                 </div>
                 <div>
                   <label className="neu-label">Contact Email</label>
-                  <input type="email" className="neu-input" value={profileForm.email} onChange={e => setProfileForm({...profileForm, email: e.target.value})} required />
+                  <input type="email" className={`neu-input ${profileForm.formState.errors.email ? 'error' : ''}`} {...profileForm.register('email')} />
+                  {profileForm.formState.errors.email && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{profileForm.formState.errors.email.message}</span>}
                 </div>
               </div>
               
               <div>
                 <label className="neu-label">Contact Phone</label>
-                <input type="text" className="neu-input" value={profileForm.phone} onChange={e => setProfileForm({...profileForm, phone: e.target.value})} />
+                <input type="text" className={`neu-input ${profileForm.formState.errors.phone ? 'error' : ''}`} {...profileForm.register('phone')} />
+                {profileForm.formState.errors.phone && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{profileForm.formState.errors.phone.message}</span>}
               </div>
 
               <div>
                 <label className="neu-label">Registered Address</label>
-                <textarea className="neu-input" rows={3} value={profileForm.address} onChange={e => setProfileForm({...profileForm, address: e.target.value})} style={{ resize: 'vertical' }} required />
+                <textarea className={`neu-input ${profileForm.formState.errors.address ? 'error' : ''}`} rows={3} {...profileForm.register('address')} style={{ resize: 'vertical' }} />
+                {profileForm.formState.errors.address && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{profileForm.formState.errors.address.message}</span>}
               </div>
               
               <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', paddingTop: '24px', borderTop: '2px solid rgba(0,0,0,0.05)' }}>
-                <button type="submit" className="neu-button gradient"><Save size={18} /> Save Changes</button>
+                <button type="submit" className="neu-button gradient" disabled={profileForm.formState.isSubmitting}>
+                  <Save size={18} /> {profileForm.formState.isSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
             </form>
           </div>
@@ -171,23 +218,28 @@ export default function Settings() {
       </div>
 
       {/* Board Modal */}
-      <Modal isOpen={isBoardModalOpen} onClose={() => setIsBoardModalOpen(false)} title="Add Board Member">
-        <form onSubmit={handleAddBoardMember} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <Modal isOpen={isBoardModalOpen} onClose={() => { setIsBoardModalOpen(false); boardForm.reset(); }} title="Add Board Member">
+        <form onSubmit={boardForm.handleSubmit(handleAddBoardMember)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div>
             <label className="neu-label">Full Name</label>
-            <input type="text" name="name" className="neu-input" required />
+            <input type="text" className={`neu-input ${boardForm.formState.errors.name ? 'error' : ''}`} {...boardForm.register('name')} />
+            {boardForm.formState.errors.name && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{boardForm.formState.errors.name.message}</span>}
           </div>
           <div>
             <label className="neu-label">Role / Position</label>
-            <input type="text" name="role" className="neu-input" required placeholder="e.g. Secretary" />
+            <input type="text" className={`neu-input ${boardForm.formState.errors.role ? 'error' : ''}`} placeholder="e.g. Secretary" {...boardForm.register('role')} />
+            {boardForm.formState.errors.role && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{boardForm.formState.errors.role.message}</span>}
           </div>
           <div>
             <label className="neu-label">Contact Email</label>
-            <input type="email" name="email" className="neu-input" required />
+            <input type="email" className={`neu-input ${boardForm.formState.errors.email ? 'error' : ''}`} {...boardForm.register('email')} />
+            {boardForm.formState.errors.email && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{boardForm.formState.errors.email.message}</span>}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '16px' }}>
-            <button type="button" className="neu-button" onClick={() => setIsBoardModalOpen(false)}>Cancel</button>
-            <button type="submit" className="neu-button gradient">Add Member</button>
+            <button type="button" className="neu-button" onClick={() => { setIsBoardModalOpen(false); boardForm.reset(); }}>Cancel</button>
+            <button type="submit" className="neu-button gradient" disabled={boardForm.formState.isSubmitting}>
+              {boardForm.formState.isSubmitting ? 'Adding...' : 'Add Member'}
+            </button>
           </div>
         </form>
       </Modal>

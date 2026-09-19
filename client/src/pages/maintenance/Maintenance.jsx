@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, Wrench, AlertCircle, CheckCircle, LayoutGrid, List, Plus } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import Modal from '../../components/ui/Modal';
+import Pagination from '../../components/ui/Pagination';
+import Skeleton, { TableSkeleton, CardSkeleton } from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
 import useToastStore from '../../store/useToastStore';
 import api from '../../api';
+
+const updateTicketSchema = z.object({
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED']),
+  assignedTo: z.string().optional()
+});
 
 export default function Maintenance() {
   const addToast = useToastStore(state => state.addToast);
@@ -39,7 +50,28 @@ export default function Maintenance() {
   const [viewMode, setViewMode] = useState('grid');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({
+    resolver: zodResolver(updateTicketSchema)
+  });
+  
+  const filteredTickets = tickets.filter(t => 
+    t.resident.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 8;
+  
+  const totalPages = Math.ceil(filteredTickets.length / ITEMS_PER_PAGE);
+  const paginatedTickets = filteredTickets.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
   const stats = {
     open: tickets.filter(t => t.status === 'OPEN').length,
     inProgress: tickets.filter(t => t.status === 'IN_PROGRESS').length,
@@ -65,19 +97,15 @@ export default function Maintenance() {
     }
   };
 
-  const handleUpdateTicket = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const newStatus = formData.get('status');
-    const newAssigned = formData.get('assigned');
-    
+  const handleUpdateTicket = async (data) => {
     try {
       await api.patch(`/maintenance/${selectedTicket.id}/status`, {
-        status: newStatus,
-        assignedTo: newAssigned
+        status: data.status,
+        assignedTo: data.assignedTo || null
       });
       addToast(`Ticket ${selectedTicket.id.substring(0, 8)}... updated successfully`, 'success');
       setIsModalOpen(false);
+      reset();
       fetchTickets();
     } catch (err) {
       console.error(err);
@@ -87,6 +115,10 @@ export default function Maintenance() {
 
   const openUpdateModal = (ticket) => {
     setSelectedTicket(ticket);
+    reset({
+      status: ticket.status,
+      assignedTo: ticket.assigned !== 'Unassigned' ? ticket.assigned : ''
+    });
     setIsModalOpen(true);
   };
 
@@ -123,7 +155,14 @@ export default function Maintenance() {
         <div style={{ display: 'flex', gap: '16px', flex: 1, maxWidth: '500px' }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--neu-text-muted)' }} />
-            <input type="text" className="neu-input" placeholder="Search tickets..." style={{ paddingLeft: '48px' }} />
+            <input 
+              type="text" 
+              className="neu-input" 
+              placeholder="Search tickets..." 
+              style={{ paddingLeft: '48px' }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
           <button className="neu-button icon-only">
             <Filter size={18} />
@@ -157,8 +196,17 @@ export default function Maintenance() {
       {viewMode === 'grid' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '24px' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--neu-text-muted)' }}>Loading...</div>
-          ) : tickets.map((ticket) => (
+            <>
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </>
+          ) : paginatedTickets.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <EmptyState title="No Tickets Found" message="Try adjusting your filters or create a new ticket." />
+            </div>
+          ) : paginatedTickets.map((ticket) => (
             <div key={ticket.id} className="neu-card animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
@@ -191,6 +239,13 @@ export default function Maintenance() {
           ))}
         </div>
       )}
+      {viewMode === 'grid' && totalPages > 1 && (
+        <Pagination 
+          currentPage={currentPage} 
+          totalPages={totalPages} 
+          onPageChange={setCurrentPage} 
+        />
+      )}
 
       {/* Ticket List View */}
       {viewMode === 'list' && (
@@ -208,10 +263,14 @@ export default function Maintenance() {
             </thead>
             <tbody>
               {loading ? (
+                <TableSkeleton columns={6} rows={5} />
+              ) : paginatedTickets.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--neu-text-muted)' }}>Loading...</td>
+                  <td colSpan="6" style={{ padding: '0' }}>
+                    <EmptyState title="No Tickets Found" message="Try adjusting your filters or create a new ticket." />
+                  </td>
                 </tr>
-              ) : tickets.map(ticket => (
+              ) : paginatedTickets.map(ticket => (
                 <tr key={ticket.id}>
                   <td style={{ fontWeight: '800', color: 'var(--neu-primary)', fontFamily: 'monospace' }}>{ticket.id.substring(0, 8)}...</td>
                   <td>
@@ -228,13 +287,20 @@ export default function Maintenance() {
               ))}
             </tbody>
           </table>
+          <div style={{ padding: '0 24px 24px' }}>
+            <Pagination 
+              currentPage={currentPage} 
+              totalPages={totalPages} 
+              onPageChange={setCurrentPage} 
+            />
+          </div>
         </div>
       )}
 
       {/* Update Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={`Update Ticket ${selectedTicket?.id?.substring(0, 8)}...`}>
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); reset(); }} title={`Update Ticket ${selectedTicket?.id?.substring(0, 8) || ''}...`}>
         {selectedTicket && (
-          <form onSubmit={handleUpdateTicket} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <form onSubmit={handleSubmit(handleUpdateTicket)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ padding: '16px', background: 'var(--neu-surface)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-pressed)' }}>
               <div style={{ fontWeight: '700', marginBottom: '4px' }}>Issue description:</div>
               <div style={{ color: 'var(--neu-text-muted)' }}>{selectedTicket.issue}</div>
@@ -242,16 +308,18 @@ export default function Maintenance() {
             
             <div>
               <label className="neu-label">Status</label>
-              <select name="status" className="neu-input" defaultValue={selectedTicket.status}>
+              <select className={`neu-input ${errors.status ? 'error' : ''}`} {...register('status')}>
                 <option value="OPEN">Open</option>
                 <option value="IN_PROGRESS">In Progress</option>
                 <option value="RESOLVED">Resolved</option>
               </select>
+              {errors.status && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{errors.status.message}</span>}
             </div>
 
             <div>
               <label className="neu-label">Assign To</label>
-              <input type="text" name="assigned" className="neu-input" defaultValue={selectedTicket.assigned} />
+              <input type="text" className={`neu-input ${errors.assignedTo ? 'error' : ''}`} {...register('assignedTo')} />
+              {errors.assignedTo && <span style={{ color: 'var(--neu-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>{errors.assignedTo.message}</span>}
             </div>
             
             <div>
@@ -260,8 +328,10 @@ export default function Maintenance() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '16px' }}>
-              <button type="button" className="neu-button" onClick={() => setIsModalOpen(false)}>Cancel</button>
-              <button type="submit" className="neu-button gradient">Save Changes</button>
+              <button type="button" className="neu-button" onClick={() => { setIsModalOpen(false); reset(); }}>Cancel</button>
+              <button type="submit" className="neu-button gradient" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving...' : 'Save Changes'}
+              </button>
             </div>
           </form>
         )}

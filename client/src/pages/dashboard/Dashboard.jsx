@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Users, DollarSign, Wrench, Calendar, TrendingUp, TrendingDown, ArrowRight, Bell, ShieldCheck } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import useAuthStore from '../../store/useAuthStore';
@@ -32,9 +33,11 @@ export default function Dashboard() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [activities, setActivities] = useState([]);
 
   useEffect(() => {
     fetchStats();
+    fetchActivities();
   }, []);
 
   const fetchStats = async () => {
@@ -48,6 +51,15 @@ export default function Dashboard() {
     }
   };
 
+  const fetchActivities = async () => {
+    try {
+      const res = await api.get('/reports/activity');
+      setActivities(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const totalExpected = dashboardStats.totalCollected + dashboardStats.totalPending;
   const collectionRate = totalExpected > 0 ? Math.round((dashboardStats.totalCollected / totalExpected) * 100) : 0;
 
@@ -56,13 +68,6 @@ export default function Dashboard() {
     { label: 'Pending Dues', value: `₱ ${dashboardStats.totalPending.toLocaleString()}`, trend: 'Needs action', isPositive: false, icon: DollarSign, color: 'var(--neu-danger)' },
     { label: 'Open Tickets', value: dashboardStats.openTickets.toString(), trend: 'Pending', isPositive: false, icon: Wrench, color: 'var(--neu-warning)' },
     { label: 'Upcoming Events', value: '3', trend: 'This week', isPositive: true, icon: Calendar, color: 'var(--neu-success)' },
-  ];
-
-  const recentActivity = [
-    { id: 1, type: 'payment', text: 'John Doe paid dues for March', time: '10 mins ago', icon: DollarSign },
-    { id: 2, type: 'ticket', text: 'New maintenance ticket #T-004 created', time: '1 hour ago', icon: Wrench },
-    { id: 3, type: 'announcement', text: 'Admin posted "Pool Maintenance Schedule"', time: '3 hours ago', icon: Bell },
-    { id: 4, type: 'security', text: 'System backup completed successfully', time: 'Yesterday', icon: ShieldCheck },
   ];
 
   return (
@@ -157,22 +162,30 @@ export default function Dashboard() {
           <div className="neu-card" style={{ padding: '24px' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '1.2rem' }}>Quick Actions</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <button className="neu-button" style={{ flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
-                <div style={{ color: 'var(--neu-primary)' }}><Bell size={24} /></div>
-                <span style={{ fontSize: '0.8rem' }}>Announce</span>
-              </button>
-              <button className="neu-button" style={{ flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
-                <div style={{ color: 'var(--neu-success)' }}><DollarSign size={24} /></div>
-                <span style={{ fontSize: '0.8rem' }}>Payment</span>
-              </button>
-              <button className="neu-button" style={{ flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
-                <div style={{ color: 'var(--neu-accent)' }}><Users size={24} /></div>
-                <span style={{ fontSize: '0.8rem' }}>Resident</span>
-              </button>
-              <button className="neu-button" style={{ flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
-                <div style={{ color: 'var(--neu-warning)' }}><Wrench size={24} /></div>
-                <span style={{ fontSize: '0.8rem' }}>Ticket</span>
-              </button>
+              <Link to="/announcements" style={{ textDecoration: 'none' }}>
+                <button className="neu-button" style={{ width: '100%', flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
+                  <div style={{ color: 'var(--neu-primary)' }}><Bell size={24} /></div>
+                  <span style={{ fontSize: '0.8rem' }}>Announce</span>
+                </button>
+              </Link>
+              <Link to="/dues" style={{ textDecoration: 'none' }}>
+                <button className="neu-button" style={{ width: '100%', flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
+                  <div style={{ color: 'var(--neu-success)' }}><DollarSign size={24} /></div>
+                  <span style={{ fontSize: '0.8rem' }}>Payment</span>
+                </button>
+              </Link>
+              <Link to="/residents" style={{ textDecoration: 'none' }}>
+                <button className="neu-button" style={{ width: '100%', flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
+                  <div style={{ color: 'var(--neu-accent)' }}><Users size={24} /></div>
+                  <span style={{ fontSize: '0.8rem' }}>Resident</span>
+                </button>
+              </Link>
+              <Link to="/maintenance" style={{ textDecoration: 'none' }}>
+                <button className="neu-button" style={{ width: '100%', flexDirection: 'column', padding: '16px 8px', gap: '12px' }}>
+                  <div style={{ color: 'var(--neu-warning)' }}><Wrench size={24} /></div>
+                  <span style={{ fontSize: '0.8rem' }}>Ticket</span>
+                </button>
+              </Link>
             </div>
           </div>
 
@@ -186,22 +199,36 @@ export default function Dashboard() {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {recentActivity.map((activity) => (
-                <div key={activity.id} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                  <div style={{ 
-                    padding: '10px', borderRadius: '50%', 
-                    backgroundColor: 'var(--neu-surface)', 
-                    boxShadow: 'var(--shadow-pressed)',
-                    color: 'var(--neu-text-muted)' 
-                  }}>
-                    <activity.icon size={16} />
+              {activities.length === 0 ? (
+                <div style={{ color: 'var(--neu-text-muted)', textAlign: 'center', marginTop: '20px' }}>No recent activity</div>
+              ) : activities.map((activity) => {
+                let ActivityIcon = ShieldCheck;
+                if (activity.entity === 'DUES' || activity.entity === 'PAYMENT') ActivityIcon = DollarSign;
+                if (activity.entity === 'MAINTENANCE') ActivityIcon = Wrench;
+                if (activity.entity === 'RESIDENT') ActivityIcon = Users;
+                if (activity.entity === 'BOOKING') ActivityIcon = Calendar;
+                
+                return (
+                  <div key={activity.id} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                    <div style={{ 
+                      padding: '10px', borderRadius: '50%', 
+                      backgroundColor: 'var(--neu-surface)', 
+                      boxShadow: 'var(--shadow-pressed)',
+                      color: 'var(--neu-text-muted)' 
+                    }}>
+                      <ActivityIcon size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--neu-text-main)', lineHeight: 1.4 }}>
+                        {activity.user} - {activity.action} ({activity.entity})
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--neu-text-muted)', fontWeight: '600', marginTop: '2px' }}>
+                        {new Date(activity.time).toLocaleString()}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--neu-text-main)', lineHeight: 1.4 }}>{activity.text}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--neu-text-muted)', fontWeight: '600', marginTop: '2px' }}>{activity.time}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           

@@ -1,41 +1,57 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Legend, Cell
 } from 'recharts';
 import { Download, Printer, Filter } from 'lucide-react';
 import useToastStore from '../../store/useToastStore';
+import api from '../../api';
 
 export default function Reports() {
   const addToast = useToastStore(state => state.addToast);
   const [dateRange, setDateRange] = useState('6M');
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const revenueData = [
-    { name: 'Jan', amount: 45000, target: 40000 },
-    { name: 'Feb', amount: 52000, target: 40000 },
-    { name: 'Mar', amount: 85500, target: 40000 },
-    { name: 'Apr', amount: 30000, target: 40000 },
-    { name: 'May', amount: 90000, target: 40000 },
-    { name: 'Jun', amount: 95000, target: 40000 },
-  ];
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        const { data } = await api.get(`/reports/analytics?range=${dateRange}`);
+        setAnalytics(data);
+      } catch (err) {
+        addToast(err.response?.data?.error || 'Failed to fetch analytics', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnalytics();
+  }, [dateRange]);
 
-  const maintenanceData = [
-    { name: 'Plumbing', tickets: 24, color: 'var(--neu-primary)' },
-    { name: 'Electrical', tickets: 18, color: 'var(--neu-warning)' },
-    { name: 'Landscaping', tickets: 35, color: 'var(--neu-success)' },
-    { name: 'General', tickets: 12, color: 'var(--neu-text-muted)' },
-  ];
-
-  const kpis = [
-    { label: 'Total Revenue (YTD)', value: '₱ 397,500', subtitle: '+14% vs last year' },
-    { label: 'Collection Rate', value: '88%', subtitle: 'Target: 95%' },
-    { label: 'Avg Payment / Resident', value: '₱ 2,548', subtitle: 'Stable' },
-    { label: 'Total Open Tickets', value: '28', subtitle: '-5 from last month' },
+  const revenueData = analytics?.revenueData || [];
+  const maintenanceData = analytics?.maintenanceData || [];
+  const kpis = analytics?.kpis || [
+    { label: 'Total Revenue (YTD)', value: '...', subtitle: '...' },
+    { label: 'Collection Rate', value: '...', subtitle: '...' },
+    { label: 'Avg Payment / Resident', value: '...', subtitle: '...' },
+    { label: 'Total Open Tickets', value: '...', subtitle: '...' },
   ];
 
   const handleExportCSV = (reportName) => {
-    // Generate dummy CSV
-    const csvContent = "data:text/csv;charset=utf-8,Month,Revenue,Target\nJan,45000,40000\nFeb,52000,40000\n";
+    let csvContent = "data:text/csv;charset=utf-8,";
+    
+    if (reportName === 'Financial_Report') {
+      csvContent += "Month,Revenue,Target\n";
+      revenueData.forEach(row => {
+        csvContent += `${row.name},${row.amount},${row.target}\n`;
+      });
+    } else if (reportName === 'Maintenance_Report') {
+      csvContent += "Category,Tickets\n";
+      maintenanceData.forEach(row => {
+        csvContent += `${row.name},${row.tickets}\n`;
+      });
+    }
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);

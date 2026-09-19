@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/useAuthStore';
 import useToastStore from '../../store/useToastStore';
 import { Eye, EyeOff, Building2, ShieldCheck, Zap } from 'lucide-react';
+import api from '../../api';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,17 +15,23 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     
-    // Simulate network delay
-    setTimeout(() => {
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      
+      if (res.data.success) {
+        login(res.data.user, res.data.token);
+        addToast('Successfully signed in. Welcome back!', 'success');
+        navigate('/');
+      }
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Failed to sign in', 'error');
+    } finally {
       setLoading(false);
-      login({ email, name: 'Admin User', role: 'SUPER_ADMIN' });
-      addToast('Successfully signed in. Welcome back!', 'success');
-      navigate('/');
-    }, 1200);
+    }
   };
 
   return (

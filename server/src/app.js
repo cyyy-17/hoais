@@ -7,28 +7,52 @@ dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
 // Import Routes
+const authRoutes = require('./routes/authRoutes');
 const residentRoutes = require('./routes/residentRoutes');
 const duesRoutes = require('./routes/duesRoutes');
-const announcementRoutes = require('./routes/announcementRoutes');
 const maintenanceRoutes = require('./routes/maintenanceRoutes');
 const facilityRoutes = require('./routes/facilityRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-
-// Routes
-app.use('/api/residents', residentRoutes);
-app.use('/api/dues', duesRoutes);
-app.use('/api/announcements', announcementRoutes);
-app.use('/api/maintenance', maintenanceRoutes);
-app.use('/api/facilities', facilityRoutes);
-app.use('/api/reports', reportRoutes);
+const settingsRoutes = require('./routes/settingsRoutes');
 
 const path = require('path');
+const { protect } = require('./middleware/auth');
+const rateLimit = require('express-rate-limit');
+
+// Rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 requests per windowMs
+  message: { error: 'Too many login attempts from this IP, please try again after 15 minutes' }
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // limit each IP to 200 requests per windowMs
+});
+
+// Middleware
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://hoais.vercel.app', 'http://localhost:4173'], // Restrict to frontend domains
+  credentials: true
+}));
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Apply general limiter to all requests
+app.use(generalLimiter);
+
+// Routes
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/residents', protect, residentRoutes);
+app.use('/api/dues', protect, duesRoutes);
+app.use('/api/maintenance', protect, maintenanceRoutes);
+app.use('/api/facilities', protect, facilityRoutes);
+app.use('/api/announcements', protect, announcementRoutes);
+app.use('/api/reports', protect, reportRoutes);
+app.use('/api/settings', protect, settingsRoutes);
 
 // Serve frontend static files if in production
 if (process.env.NODE_ENV === 'production') {

@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, FileText, Check, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
+import Pagination from '../../components/ui/Pagination';
+import Skeleton, { TableSkeleton } from '../../components/ui/Skeleton';
+import EmptyState from '../../components/ui/EmptyState';
 import useToastStore from '../../store/useToastStore';
 import api from '../../api';
 
@@ -34,8 +37,24 @@ export default function Dues() {
     }
   };
 
+  const [searchQuery, setSearchQuery] = useState('');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedDue, setSelectedDue] = useState(null);
+
+  const filteredDues = dues.filter(d => 
+    d.resident.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    d.id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+  
+  const totalPages = Math.ceil(filteredDues.length / ITEMS_PER_PAGE);
+  const paginatedDues = filteredDues.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   const totalCollected = dues.filter(d => d.status === 'PAID').reduce((sum, d) => sum + d.amount, 0);
   const totalPending = dues.filter(d => d.status === 'PENDING').reduce((sum, d) => sum + d.amount, 0);
@@ -124,7 +143,14 @@ export default function Dues() {
         <div style={{ display: 'flex', gap: '16px', flex: 1, maxWidth: '500px' }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--neu-text-muted)' }} />
-            <input type="text" className="neu-input" placeholder="Search by name or reference..." style={{ paddingLeft: '48px' }} />
+            <input 
+              type="text" 
+              className="neu-input" 
+              placeholder="Search by name or reference..." 
+              style={{ paddingLeft: '48px' }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
           <button className="neu-button icon-only">
             <Filter size={18} />
@@ -151,10 +177,14 @@ export default function Dues() {
           </thead>
           <tbody>
             {loading ? (
+              <TableSkeleton columns={6} rows={5} />
+            ) : paginatedDues.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--neu-text-muted)' }}>Loading...</td>
+                <td colSpan="6" style={{ padding: '0' }}>
+                  <EmptyState title="No Dues Found" message="Try adjusting your filters or record a payment." />
+                </td>
               </tr>
-            ) : dues.map((due) => (
+            ) : paginatedDues.map((due) => (
               <tr key={due.id}>
                 <td style={{ fontFamily: 'monospace', color: 'var(--neu-primary)', fontWeight: 'bold' }}>{due.id.substring(0, 8)}...</td>
                 <td style={{ fontWeight: '700', color: 'var(--neu-text-main)' }}>{due.resident}</td>
@@ -184,6 +214,13 @@ export default function Dues() {
             ))}
           </tbody>
         </table>
+        <div style={{ padding: '0 24px 24px' }}>
+          <Pagination 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
+            onPageChange={setCurrentPage} 
+          />
+        </div>
       </div>
 
       {/* Payment Modal */}
