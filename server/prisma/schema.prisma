@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  HOA_ADMIN
+  BOARD_MEMBER
+  RESIDENT
+}
+
+enum ResidentStatus {
+  ACTIVE
+  DELINQUENT
+  RENTING
+  ARCHIVED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(RESIDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  residentProfile Resident?
+  auditLogs       AuditLog[]
+}
+
+model Resident {
+  id           String         @id @default(uuid())
+  userId       String         @unique
+  user         User           @relation(fields: [userId], references: [id])
+  block        String
+  lot          String
+  status       ResidentStatus @default(ACTIVE)
+  moveInDate   DateTime
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  households   Household[]
+  dues         Dues[]
+  maintenance  Maintenance[]
+  bookings     Booking[]
+}
+
+model Household {
+  id          String   @id @default(uuid())
+  residentId  String
+  resident    Resident @relation(fields: [residentId], references: [id])
+  name        String
+  relation    String
+  birthdate   DateTime?
+}
+
+model Dues {
+  id          String   @id @default(uuid())
+  residentId  String
+  resident    Resident @relation(fields: [residentId], references: [id])
+  amount      Float
+  period      String   // e.g., "2024-01"
+  dueDate     DateTime
+  status      String   @default("PENDING") // PENDING, PAID, OVERDUE
+
+  payments    Payment[]
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  duesId      String
+  dues        Dues     @relation(fields: [duesId], references: [id])
+  amount      Float
+  method      String   // CASH, BANK_TRANSFER, GCASH
+  referenceNo String?
+  paidAt      DateTime @default(now())
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  category  String
+  pinned    Boolean  @default(false)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Maintenance {
+  id          String   @id @default(uuid())
+  residentId  String
+  resident    Resident @relation(fields: [residentId], references: [id])
+  category    String
+  description String
+  status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  assignedTo  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Facility {
+  id       String    @id @default(uuid())
+  name     String
+  capacity Int
+  rules    String?
+  rate     Float?
+  
+  bookings Booking[]
+}
+
+model Booking {
+  id          String   @id @default(uuid())
+  facilityId  String
+  facility    Facility @relation(fields: [facilityId], references: [id])
+  residentId  String
+  resident    Resident @relation(fields: [residentId], references: [id])
+  date        DateTime
+  timeFrom    String
+  timeTo      String
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  timestamp DateTime @default(now())
+}
