@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const settingsController = require('../controllers/settingsController');
-const { protect, restrictTo } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
-router.use(restrictTo('SUPER_ADMIN', 'HOA_ADMIN', 'BOARD_MEMBER'));
+router.use(authorize('SUPER_ADMIN', 'HOA_ADMIN', 'BOARD_MEMBER'));
 
 // HOA Profile
 router.route('/profile')
